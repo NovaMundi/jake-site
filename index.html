@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jake de Elementenkoning</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header>
+    <div class="emoji-rij" aria-hidden="true">🔥 💧 🌍 🌪️ 🐉 🦖 🔥 💧 🌍 🌪️ 🐉 🦖</div>
+    <h1>Jake de Elementenkoning!</h1>
+    <p class="tagline">Meester van vuur, water, aarde en wind</p>
+  </header>
+
+  <main>
+
+    <!-- FOTO & OVER MIJ -->
+    <section class="kaart profiel-kaart">
+      <img src="photo.jpeg" alt="Jake" class="profielfoto">
+      <div class="over-mij">
+        <h2>Over mij</h2>
+        <p>Hoi! Ik ben Jake de Elementenkoning. Ik ben 6 jaar en ik houd van dino's, vuur, water, aarde en wind. En van draken — want een draak heeft alle elementen tegelijk!</p>
+      </div>
+    </section>
+
+    <!-- DINO VAN DE DAG -->
+    <section class="kaart dino-kaart">
+      <h2>🦖 Dino van de dag</h2>
+
+      <div class="dino-naam-rij">
+        <span class="dino-naam" id="dino-naam">Tyrannosaurus rex</span>
+        <button class="spreek-knop" id="spreek-knop" title="Hoe spreek je dit uit?">🔊</button>
+      </div>
+
+      <div class="dieet-badge" id="dieet-badge">
+        <span class="dieet-icoon" id="dieet-icoon"></span>
+        <span class="dieet-label" id="dieet-label"></span>
+      </div>
+
+      <div class="dino-afbeelding-wrapper">
+        <img class="dino-afbeelding verborgen" id="dino-afbeelding" alt="">
+        <div class="dino-emoji-fallback" id="dino-emoji">🦖</div>
+      </div>
+
+      <p class="dino-feit" id="dino-feit">Laden...</p>
+      <button class="nog-een-knop" id="nog-een-knop">Nog een dino! 🎲</button>
+    </section>
+
+    <!-- ELEMENTEN -->
+    <section class="kaart elementen-kaart">
+      <h2>⚡ De vier elementen</h2>
+      <div class="elementen-grid">
+        <div class="element vuur">
+          <div class="element-emoji">🔥</div>
+          <div class="element-naam">Vuur</div>
+        </div>
+        <div class="element water">
+          <div class="element-emoji">💧</div>
+          <div class="element-naam">Water</div>
+        </div>
+        <div class="element aarde">
+          <div class="element-emoji">🌍</div>
+          <div class="element-naam">Aarde</div>
+        </div>
+        <div class="element wind">
+          <div class="element-emoji">🌪️</div>
+          <div class="element-naam">Wind</div>
+        </div>
+      </div>
+      <p class="elementen-tekst">De Elementenkoning heerst over ze allemaal! 👑</p>
+    </section>
+
+    <!-- FAVORIETEN -->
+    <section class="kaart">
+      <h2>⭐ Mijn favorieten</h2>
+      <ul class="favorieten-lijst">
+        <li>🦖 Dinosaurussen</li>
+        <li>🐉 Draken</li>
+        <li>🔥 Vuur</li>
+        <li>💧 Water</li>
+        <li>🌍 Aarde</li>
+        <li>🌪️ Wind</li>
+      </ul>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>Gemaakt door Jake de Elementenkoning en papa &nbsp;•&nbsp; 2026 👑</p>
+  </footer>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
