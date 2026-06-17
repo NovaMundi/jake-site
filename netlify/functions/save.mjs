@@ -18,7 +18,8 @@ export default async (req) => {
   const store = getStore('elementen-saves')
 
   if (req.method === 'GET') {
-    const data = await store.get(code, { type: 'json' })
+    // strong consistency: na opslaan op het ene apparaat leest een ander apparaat gegarandeerd de laatste versie.
+    const data = await store.get(code, { type: 'json', consistency: 'strong' })
     return json(data ?? null)
   }
 
