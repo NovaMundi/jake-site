@@ -4,13 +4,22 @@
 // Gebruikt Netlify Blobs (ingebouwde key-value opslag, geen aparte database nodig).
 import { getStore } from '@netlify/blobs'
 
+// CORS open: zodat een later ingepakte app (andere origin dan de website) de opslag ook mag aanroepen.
+const CORS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET, POST, OPTIONS',
+  'access-control-allow-headers': 'content-type',
+}
+
 const json = (data, status = 200) =>
-  new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } })
+  new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json', ...CORS } })
 
 // Code opschonen: alleen kleine letters/cijfers, 2-24 tekens (kindvriendelijk, geen rare tekens).
 const cleanCode = (c) => (c || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24)
 
 export default async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
+
   const url = new URL(req.url)
   const code = cleanCode(url.searchParams.get('code'))
   if (code.length < 2) return json({ error: 'ongeldige code' }, 400)
