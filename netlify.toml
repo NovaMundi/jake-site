@@ -1,0 +1,7 @@
+# Statische site (repo-root) + serverless functions voor de cloud-opslag van de Elementen-game.
+[build]
+  publish = "."
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
