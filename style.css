@@ -250,6 +250,7 @@ main {
 
 .element-emoji { font-size: 2.5rem; }
 .element-naam { font-family: var(--lettertype-titel); font-size: 1.1rem; letter-spacing: 0.5px; }
+.element-feit { font-size: 0.82rem; line-height: 1.4; margin-top: 0.5rem; opacity: 0.85; }
 
 .element.vuur  { background: linear-gradient(135deg, #fff0e0, #ffd0a0); color: #c25000; }
 .element.water { background: linear-gradient(135deg, #e0f4ff, #b0d8f5); color: #0077b6; }
