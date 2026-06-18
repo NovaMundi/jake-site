@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Jakes Elementen game — alle wezens</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0e1326; color: #cfe0ff; font: 14px/1.4 system-ui, sans-serif; padding: 20px; }
+  h1 { font-size: 22px; margin: 0 0 2px; }
+  p.sub { color: #9fb4e6; margin: 0 0 18px; }
+  h2 { font-size: 16px; margin: 26px 0 10px; color: #7fa0e0; border-bottom: 1px solid #28335a; padding-bottom: 5px; }
+  .row { display: grid; grid-template-columns: 120px repeat(6, 1fr); gap: 8px; align-items: stretch; margin-bottom: 10px; }
+  .rowhead { display: flex; flex-direction: column; justify-content: center; font-weight: 800; font-size: 13px; }
+  .rowhead .emo { font-size: 20px; margin-bottom: 2px; }
+  .rowhead .sub { color: #9fb4e6; font-weight: 600; font-size: 11px; }
+  .cell { background: #18203c; border-radius: 12px; padding: 7px 5px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .cell img { width: 100%; max-width: 90px; aspect-ratio: 1; object-fit: contain; }
+  .nm { font-size: 11px; font-weight: 700; line-height: 1.2; }
+  .ph { display: grid; grid-template-columns: 120px repeat(6, 1fr); gap: 8px; margin-bottom: 6px; }
+  .ph div { text-align: center; font-size: 11px; color: #9fb4e6; }
+  .ph .lvl { color: #6f7fa8; }
+</style>
+</head>
+<body>
+  <h1>🌟 Jakes Elementen game — alle wezens</h1>
+  <p class="sub">Elk wezen heeft 6 vormen. Twee dezelfde samen = een level hoger; op level 6/11/16/21/26 evolueert het naar de volgende vorm. Twee verschillende basiselementen (level 5+) kruis je tot een hybride.</p>
+  <div id="grid"></div>
+<script>
+  const BASE = '/elementengame/'
+  const ELS = ['fire','water','earth','air','ice','electric','magic','iron']
+  const NL = { fire:'Vuur', water:'Water', earth:'Aarde', air:'Lucht', ice:'IJs', electric:'Elektro', magic:'Magie', iron:'IJzer' }
+  const EMO = { fire:'🔥', water:'💧', earth:'🪨', air:'💨', ice:'❄️', electric:'⚡', magic:'✨', iron:'⚙️' }
+  const PHASES = ['Basis','Geëvolueerd','Episch','Held','Legendarisch','Eindbaas']
+  const LVLS = ['1-5','6-10','11-15','16-20','21-25','26-30']
+
+  const SINGLE = {
+    fire:['Vonkie','Vlammetje','Heethoofd','Vuurvreter','Vuurdraak','Vlammenkoning'],
+    water:['Druppie','Plonsje','Spetterbaas','Golfridder','Vloedmonster','Oceaankoning'],
+    earth:['Kiezeltje','Keibonk','Rotsblok','Rotsreus','Bergtrol','Aardkolos'],
+    air:['Briesje','Windje','Wervelwind','Stormjager','Orkaan','Hemelheerser'],
+    ice:['IJsklontje','Sneeuwbal','IJspegel','Winterbijter','IJsbeer','IJskoningin'],
+    electric:['Flitsje','Zoemer','Knetterkop','Bliksembaas','Donderbeest','Stormheer'],
+    magic:['Twinkel','Toverbol','Goochelaar','Tovenaar','Aartsmagiër','Sterrenmeester'],
+    iron:['Spijkertje','Boutje','Schildknaap','Stalen Ridder','IJzerreus','Generaal IJzervuist'],
+  }
+  const COMBO = {
+    'fire-water':['Pufje','Stoompluim','Geiser','Stoomgeest','Stoomtitan','Stoomkolos'],
+    'fire-earth':['Vonkkei','Gloeisteen','Lavasteen','Lavastroom','Vulkaan','Vulkaankoning'],
+    'fire-air':['Warmbriesje','Vlamveeg','Vuurwervel','Vlamgeest','Vuurstorm','Vlammenfeniks'],
+    'fire-ice':['Lauwtje','Dampwolk','Smeltgloed','Dooivuur','Smeltkern','Smeltkoning'],
+    'fire-electric':['Knettervonk','Vonkbal','Plasmabol','Plasmastoot','Plasmastorm','Plasmaheer'],
+    'fire-magic':['Toverkooltje','Heksenvonk','Heksenvuur','Vuurspreuk','Vlammende Heks','Heksenkoning'],
+    'fire-iron':['Heetboutje','Gloeispijker','Gloeistaal','Smeedijzer','Smidsreus','Smeedkoning'],
+    'water-earth':['Zaadje','Spruitje','Boompje','Boomstam','Woudwachter','Wereldboom'],
+    'water-air':['Nevelpluis','Mistje','Nevel','Mistgeest','Nevelsluier','Mistheerser'],
+    'water-ice':['IJswater','Vrieswater','Poolzee','IJszee','Poolgolf','Poolkoning'],
+    'water-electric':['Tinteldrup','Vonkgolf','Stroomgolf','Schokgolf','Stroomstorm','Stroomkoning'],
+    'water-magic':['Toverdrup','Waterwens','Waterspreuk','Watertovenaar','Zeespreuk','Waterkoning'],
+    'water-iron':['Roestdrup','Roestvlek','Roestgolf','Roestbeest','Roeststorm','Roestkolos'],
+    'earth-air':['Stofje','Zandwervel','Zandstorm','Stofduivel','Woestijnstorm','Zandkoning'],
+    'earth-ice':['Rijpkei','Vrieskei','Vrieskorst','IJsrots','Vriesberg','Vriesreus'],
+    'earth-electric':['Vonksteen','Kristalkei','Geode','Kristalrots','Donderkristal','Kristalkolos'],
+    'earth-magic':['Runesteentje','Toverkei','Aardrune','Runewachter','Aardmagiër','Runeheer'],
+    'earth-iron':['Ertskorrel','Ertsklomp','Erts','Ertsblok','Ertsreus','Ertskolos'],
+    'air-ice':['Sneeuwvlokje','Koudbriesje','Blizzard','Sneeuwstorm','Vrieswind','Blizzardkoning'],
+    'air-electric':['Tintelbries','Vonkwind','Onweer','Bliksemwind','Stormfront','Onweersheer'],
+    'air-magic':['Fluisterbries','Toverwind','Windgeest','Windtovenaar','Stormgeest','Windheerser'],
+    'air-iron':['Fluitbout','Windspijker','Staalwind','Mesvleugel','Staalstorm','Staalkoning'],
+    'ice-electric':['Knettervlok','Vonkijs','IJsschok','Vriesschok','IJsstorm','Winterkoning'],
+    'ice-magic':['Toversneeuw','IJswens','IJstovenaar','Wintermagiër','IJsspreuk','Winterheks'],
+    'ice-iron':['IJsspijker','Vriesmes','Winterkling','IJszwaard','Winterridder','Wintergeneraal'],
+    'electric-magic':['Toverflits','Vonkwens','Arcanevonk','Magievonk','Arcanestorm','Vonkheer'],
+    'electric-iron':['Knetterbout','Vonkstaal','Bliksemstaal','Schokstaal','Bliksemreus','Bliksemkoning'],
+    'magic-iron':['Runebout','Toverstaal','Runestaal','Runewapen','Runeridder','Runeheer'],
+  }
+
+  function singlePaths(e){ return [BASE+'art/'+e+'.png', BASE+'art/levels/'+e+'-2.png', BASE+'art/levels/'+e+'-3.png', BASE+'art/levels/'+e+'-t3.png', BASE+'art/levels/'+e+'-t4.png', BASE+'art/levels/'+e+'-t5.png'] }
+  function comboPaths(k){ return [BASE+'art/combo/'+k+'.png', BASE+'art/combo/'+k+'-3.png', BASE+'art/combo/'+k+'-4.png', BASE+'art/combo/'+k+'-t3.png', BASE+'art/combo/'+k+'-t4.png', BASE+'art/combo/'+k+'-t5.png'] }
+
+  const grid = document.getElementById('grid')
+  function phaseHeader(){
+    const h = document.createElement('div'); h.className='ph'
+    h.innerHTML = '<div></div>' + PHASES.map((p,i)=>'<div><b>'+p+'</b><br><span class="lvl">lvl '+LVLS[i]+'</span></div>').join('')
+    grid.appendChild(h)
+  }
+  function section(title){ const s=document.createElement('h2'); s.textContent=title; grid.appendChild(s); phaseHeader() }
+  function row(headHtml, paths, names){
+    const r = document.createElement('div'); r.className='row'
+    let html = '<div class="rowhead">'+headHtml+'</div>'
+    for (let i=0;i<6;i++) html += '<div class="cell"><img loading="lazy" src="'+paths[i]+'" alt=""><span class="nm">'+names[i]+'</span></div>'
+    r.innerHTML = html
+    grid.appendChild(r)
+  }
+
+  section('8 basiselementen')
+  for (const e of ELS) row('<span class="emo">'+EMO[e]+'</span>'+NL[e], singlePaths(e), SINGLE[e])
+
+  section('28 hybrides (kruisingen)')
+  for (let i=0;i<ELS.length;i++) for (let j=i+1;j<ELS.length;j++){
+    const k = ELS[i]+'-'+ELS[j]
+    row('<span class="emo">'+EMO[ELS[i]]+EMO[ELS[j]]+'</span><span class="sub">'+NL[ELS[i]]+' + '+NL[ELS[j]]+'</span>', comboPaths(k), COMBO[k])
+  }
+</script>
+</body>
+</html>
