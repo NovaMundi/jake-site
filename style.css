@@ -121,6 +121,17 @@ main {
 }
 .game-knop:hover { transform: translateY(-3px) scale(1.05); box-shadow: 0 10px 24px rgba(230,57,70,0.5); }
 .game-knop:active { transform: scale(0.97); }
+.game-link {
+  display: inline-block;
+  margin-top: 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #c25000;
+  text-decoration: none;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+.game-link:hover { opacity: 1; text-decoration: underline; }
 
 /* === DINO VAN DE DAG === */
 .dino-kaart {
