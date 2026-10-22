@@ -34,7 +34,8 @@ export default async (req) => {
   if (code.length < 8 || !wie) return json({ fout: 'ongeldige code' }, 400)
 
   const store = getStore('planeten')
-  if (!(await store.get(`${code}/_familie`))) return json({ kan: false, fout: 'onbekende familie' }, 403)
+  // Altijd de laatste stand: net na het aanzetten van de wolk moet de toverknop meteen werken.
+  if (!(await store.get(`${code}/_familie`, { consistency: 'strong' }))) return json({ kan: false, fout: 'onbekende familie' }, 403)
   const dag = new Date().toISOString().slice(0, 10)
   const gebruikt = Number((await store.get(`${code}/_echt/${dag}/${wie}`, { consistency: 'strong' })) || 0)
   const over = Math.max(0, PER_DAG - gebruikt)
