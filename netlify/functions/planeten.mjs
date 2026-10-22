@@ -9,15 +9,20 @@
  *   POST ?code=xxx&wie=owen             -> body = { versie, data }, bewaart als versie klopt
  *   POST ?code=xxx&wie=owen&forceer=1   -> bewaart hoe dan ook (na een keuze bij twee versies)
  *
+ * Toegang: elk apparaat stuurt zijn eigen sleutel mee (zie netlify/lib/planeet-toegang.mjs).
+ *   POST ?code=xxx&actie=sleutel        -> body = { uitnodiging? } -> { sleutel }
+ *   POST ?code=xxx&actie=uitnodig       -> (met sleutel) -> { uitnodiging, dagen, keer }
+ *
  * wie = owen | jake | papa | wensen. De functie staat op jakevanpelt.com en wordt ook
  * aangeroepen vanaf owenvanpelt.com (en vanaf papa's laptop), vandaar CORS open.
  */
 import { getStore } from '@netlify/blobs'
+import { heeftToegang, geefSleutel, maakUitnodiging, SLEUTEL_HEADER } from '../lib/planeet-toegang.mjs'
 
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, POST, OPTIONS',
-  'access-control-allow-headers': 'content-type',
+  'access-control-allow-headers': 'content-type, ' + SLEUTEL_HEADER,
 }
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json', ...CORS } })
@@ -32,9 +37,29 @@ export default async (req) => {
   const code = schoon(url.searchParams.get('code'))
   const wie = url.searchParams.get('wie')
   if (code.length < 8) return json({ fout: 'ongeldige code' }, 400)
-  if (!WIE.includes(wie)) return json({ fout: 'onbekende planeet' }, 400)
-
   const store = getStore('planeten')
+
+  // Koppelen: een sleutel voor dit apparaat, of een uitnodiging voor een ander apparaat.
+  const actie = url.searchParams.get('actie')
+  if (actie && req.method === 'POST') {
+    if (actie === 'sleutel') {
+      let uitnodiging = null
+      try {
+        uitnodiging = (JSON.parse((await req.text()) || '{}').uitnodiging || '').toString().replace(/[^a-f0-9]/g, '').slice(0, 64) || null
+      } catch {}
+      const sleutel = await geefSleutel(store, code, uitnodiging)
+      return sleutel ? json({ sleutel }) : json({ fout: 'geen toegang' }, 401)
+    }
+    if (actie === 'uitnodig') {
+      if (!(await heeftToegang(store, code, req))) return json({ fout: 'geen toegang' }, 401)
+      const u = await maakUitnodiging(store, code)
+      return u ? json(u) : json({ fout: 'probeer opnieuw' }, 503)
+    }
+    return json({ fout: 'onbekende actie' }, 400)
+  }
+
+  if (!WIE.includes(wie)) return json({ fout: 'onbekende planeet' }, 400)
+  if (!(await heeftToegang(store, code, req))) return json({ fout: 'geen toegang' }, 401)
   const sleutel = `${code}/${wie}`
 
   const bak = `${code}/_prullenbak/${wie}/`
