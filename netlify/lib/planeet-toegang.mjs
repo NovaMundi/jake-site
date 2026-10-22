@@ -10,12 +10,17 @@
  * Op de server bewaren we alleen een hash van sleutels en uitnodigingen.
  *
  * In de opslag: <code>/_apparaten = { sleutels: [{ h, sinds }], uitnodigingen: [{ h, tot, over }], overgangTot }
+ *
+ * Antwoorden van geefSleutel/maakUitnodiging: de waarde, null (geweigerd) of BOTSING (het register
+ * werd steeds tegelijk door een ander apparaat aangepast: later opnieuw proberen, niet weigeren).
  */
 
 export const OVERGANG_EIND = Date.parse('2026-11-15T00:00:00Z')
 const UITNODIGING_DAGEN = 7
 const UITNODIGING_KEER = 5
 const MAX_SLEUTELS = 30
+const OVERGANG_PER_DAG = 12 // sleutels zonder uitnodiging (overgang), per familie per dag
+export const BOTSING = Symbol('botsing')
 
 export const SLEUTEL_HEADER = 'x-planeet-sleutel'
 
@@ -42,7 +47,7 @@ async function pasAan(store, code, fn) {
     const gelukt = await store.set(regSleutel(code), JSON.stringify(uit.reg), voorwaarde)
     if (!gelukt || gelukt.modified !== false) return uit.antwoord
   }
-  return null
+  return BOTSING
 }
 
 // Heeft dit verzoek toegang tot de planeten van deze familie?
@@ -81,16 +86,37 @@ export async function geefSleutel(store, code, uitnodiging) {
         u.over--
         mag = true
       }
-    } else if (!reg) {
-      // Eerste apparaat van een nieuwe familie, of een apparaat van vóór de sleutels.
-      if (nieuwOfOud === 'nieuw') mag = true
-      else if (nu < OVERGANG_EIND) mag = true
-      reg = { sleutels: [], uitnodigingen: [], overgangTot: nieuwOfOud === 'oud' ? OVERGANG_EIND : 0 }
-    } else if (nu < (reg.overgangTot || 0)) mag = true
-    if (!mag) return null
+    } else {
+      // Zonder uitnodiging: eerste apparaat van een nieuwe familie, of een apparaat van vóór de
+      // sleutels (overgang). Dat laatste hooguit een paar keer per dag, zodat niemand met een oude
+      // link het register kan volproppen.
+      const dag = new Date(nu).toISOString().slice(0, 10)
+      if (!reg) {
+        if (nieuwOfOud === 'nieuw' || nu < OVERGANG_EIND) mag = true
+        reg = { sleutels: [], uitnodigingen: [], overgangTot: nieuwOfOud === 'oud' ? OVERGANG_EIND : 0 }
+      } else if (nu < (reg.overgangTot || 0) && !(reg.overgangDag === dag && reg.overgangKeer >= OVERGANG_PER_DAG)) mag = true
+      if (mag) {
+        reg.overgangKeer = reg.overgangDag === dag ? (reg.overgangKeer || 0) + 1 : 1
+        reg.overgangDag = dag
+      }
+    }
+    // Vol? Dan weigeren in plaats van oude (echte) sleutels weg te gooien. Opruimen kan met
+    // "andere apparaten loskoppelen" op een gekoppeld apparaat.
+    if (!mag || reg.sleutels.length >= MAX_SLEUTELS) return null
     reg.sleutels.push({ h, sinds: new Date(nu).toISOString() })
-    if (reg.sleutels.length > MAX_SLEUTELS) reg.sleutels = reg.sleutels.slice(-MAX_SLEUTELS)
     return { reg, antwoord: sleutel }
+  })
+}
+
+// Alle andere apparaten loskoppelen: alleen de sleutel van dit apparaat blijft over, alle
+// uitnodigingen vervallen en de overgang stopt meteen. Voor als er ooit een link rondgaat.
+export async function alleenDit(store, code, req) {
+  const sleutel = req.headers.get(SLEUTEL_HEADER) || ''
+  if (!sleutel) return null
+  const h = await hash(sleutel)
+  return pasAan(store, code, async (reg) => {
+    if (!reg || !reg.sleutels.some((s) => s.h === h)) return null
+    return { reg: { sleutels: reg.sleutels.filter((s) => s.h === h), uitnodigingen: [], overgangTot: 0 }, antwoord: true }
   })
 }
 

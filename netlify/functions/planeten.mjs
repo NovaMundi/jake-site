@@ -12,12 +12,13 @@
  * Toegang: elk apparaat stuurt zijn eigen sleutel mee (zie netlify/lib/planeet-toegang.mjs).
  *   POST ?code=xxx&actie=sleutel        -> body = { uitnodiging? } -> { sleutel }
  *   POST ?code=xxx&actie=uitnodig       -> (met sleutel) -> { uitnodiging, dagen, keer }
+ *   POST ?code=xxx&actie=alleen-dit     -> (met sleutel) alle andere apparaten loskoppelen
  *
  * wie = owen | jake | papa | wensen. De functie staat op jakevanpelt.com en wordt ook
  * aangeroepen vanaf owenvanpelt.com (en vanaf papa's laptop), vandaar CORS open.
  */
 import { getStore } from '@netlify/blobs'
-import { heeftToegang, geefSleutel, maakUitnodiging, SLEUTEL_HEADER } from '../lib/planeet-toegang.mjs'
+import { heeftToegang, geefSleutel, maakUitnodiging, alleenDit, BOTSING, SLEUTEL_HEADER } from '../lib/planeet-toegang.mjs'
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -48,12 +49,18 @@ export default async (req) => {
         uitnodiging = (JSON.parse((await req.text()) || '{}').uitnodiging || '').toString().replace(/[^a-f0-9]/g, '').slice(0, 64) || null
       } catch {}
       const sleutel = await geefSleutel(store, code, uitnodiging)
+      if (sleutel === BOTSING) return json({ fout: 'probeer opnieuw' }, 503)
       return sleutel ? json({ sleutel }) : json({ fout: 'geen toegang' }, 401)
     }
     if (actie === 'uitnodig') {
       if (!(await heeftToegang(store, code, req))) return json({ fout: 'geen toegang' }, 401)
       const u = await maakUitnodiging(store, code)
-      return u ? json(u) : json({ fout: 'probeer opnieuw' }, 503)
+      return u && u !== BOTSING ? json(u) : json({ fout: 'probeer opnieuw' }, 503)
+    }
+    if (actie === 'alleen-dit') {
+      const ok = await alleenDit(store, code, req)
+      if (ok === BOTSING) return json({ fout: 'probeer opnieuw' }, 503)
+      return ok ? json({ ok: true }) : json({ fout: 'geen toegang' }, 401)
     }
     return json({ fout: 'onbekende actie' }, 400)
   }
