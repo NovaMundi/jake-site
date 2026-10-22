@@ -62,7 +62,18 @@ export default async (req) => {
   }
   const nieuw = { versie: huidigeVersie + 1, gewijzigd: new Date().toISOString(), data: binnen.data }
   await store.set(sleutel, JSON.stringify(nieuw))
-  // Familiecode registreren, zodat de toverknop weet dat dit een echte familie is.
-  if (!(await store.get(`${code}/_familie`))) await store.set(`${code}/_familie`, JSON.stringify({ sinds: nieuw.gewijzigd }))
+  // Een familie (die mag toveren, en dat kost geld) ontstaat alleen via de knop "Wolk aanzetten",
+  // en per internetadres hooguit een paar keer per dag. Anders kon iedereen met een verzonnen
+  // code op onze kosten toveren.
+  if (url.searchParams.get('aanzetten') === '1' && !(await store.get(`${code}/_familie`, { consistency: 'strong' }))) {
+    const ip = (req.headers.get('x-nf-client-connection-ip') || 'onbekend').replace(/[^0-9a-f.:]/gi, '')
+    const dag = new Date().toISOString().slice(0, 10)
+    const ipSleutel = `_aanzetten/${dag}/${ip}`
+    const keer = Number((await store.get(ipSleutel, { consistency: 'strong' })) || 0)
+    if (keer < 3) {
+      await store.set(ipSleutel, String(keer + 1))
+      await store.set(`${code}/_familie`, JSON.stringify({ sinds: nieuw.gewijzigd }))
+    }
+  }
   return json({ ok: true, versie: nieuw.versie, gewijzigd: nieuw.gewijzigd })
 }

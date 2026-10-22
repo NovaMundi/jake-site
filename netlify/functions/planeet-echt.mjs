@@ -5,8 +5,12 @@
  * achtergrondfunctie (planeet-echt-background) maakt het plaatje, en de planeet vraagt hier
  * elke paar seconden of het al klaar is.
  *
- * Kost geld per plaatje, dus: alleen met een familiecode die echt bestaat (er is minstens één
- * planeet opgeslagen), en per planeet maximaal een paar keer per dag.
+ * Kost geld per plaatje, dus vier sloten:
+ *   - alleen met een familiecode die via "Wolk aanzetten" is gemaakt (zie planeten.mjs),
+ *   - alleen voor de planeten owen, jake en papa,
+ *   - per planeet maximaal een paar keer per dag; de beurt wordt vooraf gereserveerd en bij
+ *     mislukken teruggegeven (zo kunnen tien tegelijk verstuurde verzoeken niet allemaal door),
+ *   - en een totaalplafond per dag over alle families samen.
  *
  *   GET  ?code=xxx&wie=owen            -> { kan, over, perDag }
  *   POST ?code=xxx&wie=owen            -> body = { image, huid, beweging, maat } -> { taak }
@@ -25,19 +29,23 @@ const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json', ...CORS } })
 const schoon = (c) => (c || '').toString().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 48)
 const PER_DAG = Number(process.env.PLANETEN_ECHT_PER_DAG) || 5
+const TOTAAL_PER_DAG = Number(process.env.PLANETEN_ECHT_TOTAAL_PER_DAG) || 60
+const PLANETEN = ['owen', 'jake', 'papa']
 
 export default async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
   const url = new URL(req.url)
   const code = schoon(url.searchParams.get('code'))
-  const wie = (url.searchParams.get('wie') || '').replace(/[^a-z]/g, '').slice(0, 10)
-  if (code.length < 8 || !wie) return json({ fout: 'ongeldige code' }, 400)
+  const wie = url.searchParams.get('wie')
+  if (code.length < 8 || !PLANETEN.includes(wie)) return json({ fout: 'ongeldige code' }, 400)
 
   const store = getStore('planeten')
   // Altijd de laatste stand: net na het aanzetten van de wolk moet de toverknop meteen werken.
   if (!(await store.get(`${code}/_familie`, { consistency: 'strong' }))) return json({ kan: false, fout: 'onbekende familie' }, 403)
   const dag = new Date().toISOString().slice(0, 10)
-  const gebruikt = Number((await store.get(`${code}/_echt/${dag}/${wie}`, { consistency: 'strong' })) || 0)
+  const teller = `${code}/_echt/${dag}/${wie}`
+  const totaal = `_echt-totaal/${dag}`
+  const gebruikt = Number((await store.get(teller, { consistency: 'strong' })) || 0)
   const over = Math.max(0, PER_DAG - gebruikt)
 
   if (req.method === 'GET') {
@@ -52,9 +60,15 @@ export default async (req) => {
   if (req.method !== 'POST') return json({ fout: 'methode niet toegestaan' }, 405)
   if (!process.env.OPENAI_API_KEY) return json({ fout: 'geen sleutel' }, 501)
   if (over <= 0) return json({ fout: 'limiet', over: 0, perDag: PER_DAG }, 429)
+  const vandaagTotaal = Number((await store.get(totaal, { consistency: 'strong' })) || 0)
+  if (vandaagTotaal >= TOTAAL_PER_DAG) return json({ fout: 'limiet', over: 0, perDag: PER_DAG }, 429)
 
   const rauw = await req.text()
   if (rauw.length > 3_000_000) return json({ fout: 'te groot' }, 413)
+
+  // Vooraf reserveren; de achtergrondfunctie geeft de beurt terug als het mislukt.
+  await store.set(teller, String(gebruikt + 1))
+  await store.set(totaal, String(vandaagTotaal + 1))
   const taak = Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
   await store.set(`${code}/_taak/${taak}/in`, rauw)
   // De achtergrondfunctie aanzetten; die antwoordt meteen en werkt daarna verder.
