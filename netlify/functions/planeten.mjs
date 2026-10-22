@@ -37,6 +37,16 @@ export default async (req) => {
   const store = getStore('planeten')
   const sleutel = `${code}/${wie}`
 
+  const bak = `${code}/_prullenbak/${wie}/`
+  if (req.method === 'GET' && url.searchParams.get('prullenbak')) {
+    const welke = url.searchParams.get('prullenbak')
+    if (welke === 'lijst') {
+      const { blobs } = await store.list({ prefix: bak })
+      return json(blobs.map((b) => b.key.slice(bak.length)).filter((t) => /^\d+$/.test(t)))
+    }
+    if (!/^\d+$/.test(welke)) return json({ fout: 'onbekend' }, 400)
+    return json((await store.get(bak + welke, { type: 'json' })) ?? null)
+  }
   if (req.method === 'GET') {
     // Strong consistency: komt een kind thuis van de andere ouder, dan meteen de laatste versie.
     const doc = await store.get(sleutel, { type: 'json', consistency: 'strong' })
@@ -61,6 +71,15 @@ export default async (req) => {
     return json({ fout: 'ingehaald', versie: huidigeVersie, hunne: huidig }, 409)
   }
   const nieuw = { versie: huidigeVersie + 1, gewijzigd: new Date().toISOString(), data: binnen.data }
+  // Prullenbak: wordt een planeet weggegooid, vervangen door een nieuwe, of bij twee versies
+  // overschreven, dan bewaren we de oude nog 30 dagen. Zo kan papa hem altijd terughalen.
+  const oud = huidig?.data?.recept
+  if (wie !== 'wensen' && oud && (forceer || !binnen.data.recept || binnen.data.recept.zaad !== oud.zaad)) {
+    await store.set(bak + Date.now(), JSON.stringify(huidig))
+    const { blobs } = await store.list({ prefix: bak })
+    const grens = Date.now() - 30 * 24 * 3600 * 1000
+    for (const b of blobs) if (Number(b.key.slice(bak.length)) < grens) await store.delete(b.key)
+  }
   await store.set(sleutel, JSON.stringify(nieuw))
   // Een familie (die mag toveren, en dat kost geld) ontstaat alleen via de knop "Wolk aanzetten",
   // en per internetadres hooguit een paar keer per dag. Anders kon iedereen met een verzonnen
