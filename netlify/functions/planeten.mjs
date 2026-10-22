@@ -65,7 +65,8 @@ export default async (req) => {
   if (!binnen || typeof binnen !== 'object' || !binnen.data) return json({ fout: 'geen planeet meegestuurd' }, 400)
 
   const forceer = url.searchParams.get('forceer') === '1'
-  const huidig = await store.get(sleutel, { type: 'json', consistency: 'strong' })
+  const metEtag = await store.getWithMetadata(sleutel, { type: 'json', consistency: 'strong' })
+  const huidig = metEtag?.data ?? null
   const huidigeVersie = huidig ? huidig.versie || 0 : 0
   if (!forceer && huidig && (binnen.versie || 0) !== huidigeVersie) {
     return json({ fout: 'ingehaald', versie: huidigeVersie, hunne: huidig }, 409)
@@ -80,7 +81,15 @@ export default async (req) => {
     const grens = Date.now() - 30 * 24 * 3600 * 1000
     for (const b of blobs) if (Number(b.key.slice(bak.length)) < grens) await store.delete(b.key)
   }
-  await store.set(sleutel, JSON.stringify(nieuw))
+  // Alleen opslaan als er intussen niemand anders heeft opgeslagen (twee tablets tegelijk).
+  // Anders weigeren, net als bij een oude versie: dan kiest het kind.
+  // (Geeft de opslag geen etag terug, zoals bij lokaal testen, dan gewoon opslaan zoals vroeger.)
+  const voorwaarde = metEtag?.etag ? { onlyIfMatch: metEtag.etag } : huidig ? {} : { onlyIfNew: true }
+  const gelukt = await store.set(sleutel, JSON.stringify(nieuw), voorwaarde)
+  if (gelukt && gelukt.modified === false) {
+    const nu = await store.get(sleutel, { type: 'json', consistency: 'strong' })
+    return json({ fout: 'ingehaald', versie: nu?.versie || 0, hunne: nu }, 409)
+  }
   // Een familie (die mag toveren, en dat kost geld) ontstaat alleen via de knop "Wolk aanzetten",
   // en per internetadres hooguit een paar keer per dag. Anders kon iedereen met een verzonnen
   // code op onze kosten toveren.
