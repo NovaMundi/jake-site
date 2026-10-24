@@ -50,17 +50,36 @@ async function pasAan(store, code, fn) {
   return BOTSING
 }
 
-// Heeft dit verzoek toegang tot de planeten van deze familie?
+// Elke speler heeft zijn eigen planeten (owen, owen-2, owen-3). Een apparaat hoort bij één speler:
+// via de site waarop het speelt (owenvanpelt.com = Owen) en, sinds de QR-codes, via zijn sleutel.
+// Zo kunnen de broers niet meer bij elkaars planeten. Papa's laptop (andere site) mag alles.
+export const spelerVan = (wie) => String(wie || '').split('-')[0]
+export function siteSpeler(req) {
+  const bron = req.headers.get('origin') || req.headers.get('referer') || ''
+  if (/owenvanpelt\.com/i.test(bron)) return 'owen'
+  if (/jakevanpelt\.com/i.test(bron)) return 'jake'
+  return null
+}
+// Mag dit apparaat (toegang uit heeftToegang) bij planeet 'wie'? De wensen zijn van iedereen.
+export function magBij(toegang, wie, req) {
+  if (!toegang) return false
+  if (wie === 'wensen') return true
+  const eigen = [toegang.speler, siteSpeler(req)].filter(Boolean)
+  return eigen.every((s) => s === spelerVan(wie))
+}
+
+// Heeft dit verzoek toegang tot de planeten van deze familie? Geeft false of { speler } terug.
 export async function heeftToegang(store, code, req) {
   const sleutel = req.headers.get(SLEUTEL_HEADER) || ''
   const reg = (await leesReg(store, code))?.data ?? null
   if (sleutel && reg) {
     const h = await hash(sleutel)
-    if (reg.sleutels.some((s) => s.h === h)) return true
+    const s = reg.sleutels.find((x) => x.h === h)
+    if (s) return { speler: s.speler || null }
   }
   // Overgang: families van vóór de sleutels.
   const tot = reg ? reg.overgangTot || 0 : OVERGANG_EIND
-  return Date.now() < tot
+  return Date.now() < tot ? { speler: null } : false
 }
 
 // Bestond deze familie al voordat er sleutels waren?
@@ -79,12 +98,14 @@ export async function geefSleutel(store, code, uitnodiging) {
   return pasAan(store, code, async (reg) => {
     const nu = Date.now()
     let mag = false
+    let speler = null
     reg = reg ? { ...reg, sleutels: [...reg.sleutels], uitnodigingen: (reg.uitnodigingen || []).filter((u) => u.tot > nu && u.over > 0) } : null
     if (uh) {
       const u = reg && reg.uitnodigingen.find((x) => x.h === uh)
       if (u) {
         u.over--
         mag = true
+        speler = u.speler || null
       }
     } else {
       // Zonder uitnodiging: eerste apparaat van een nieuwe familie, of een apparaat van vóór de
@@ -103,7 +124,7 @@ export async function geefSleutel(store, code, uitnodiging) {
     // Vol? Dan weigeren in plaats van oude (echte) sleutels weg te gooien. Opruimen kan met
     // "andere apparaten loskoppelen" op een gekoppeld apparaat.
     if (!mag || reg.sleutels.length >= MAX_SLEUTELS) return null
-    reg.sleutels.push({ h, sinds: new Date(nu).toISOString() })
+    reg.sleutels.push({ h, sinds: new Date(nu).toISOString(), ...(speler ? { speler } : {}) })
     return { reg, antwoord: sleutel }
   })
 }
@@ -121,13 +142,13 @@ export async function alleenDit(store, code, req) {
 }
 
 // Een nieuwe koppel-uitnodiging (alleen voor een apparaat dat zelf al toegang heeft).
-export async function maakUitnodiging(store, code) {
+export async function maakUitnodiging(store, code, speler = null) {
   const token = willekeurig(12)
   const h = await hash(token)
   return pasAan(store, code, async (reg) => {
     const nu = Date.now()
     reg = reg ? { ...reg, uitnodigingen: (reg.uitnodigingen || []).filter((u) => u.tot > nu && u.over > 0) } : { sleutels: [], uitnodigingen: [], overgangTot: OVERGANG_EIND }
-    reg.uitnodigingen.push({ h, tot: nu + UITNODIGING_DAGEN * 24 * 3600 * 1000, over: UITNODIGING_KEER })
+    reg.uitnodigingen.push({ h, tot: nu + UITNODIGING_DAGEN * 24 * 3600 * 1000, over: UITNODIGING_KEER, ...(speler ? { speler } : {}) })
     if (reg.uitnodigingen.length > 10) reg.uitnodigingen = reg.uitnodigingen.slice(-10)
     return { reg, antwoord: { uitnodiging: token, dagen: UITNODIGING_DAGEN, keer: UITNODIGING_KEER } }
   })

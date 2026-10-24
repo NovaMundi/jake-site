@@ -14,11 +14,12 @@
  *   POST ?code=xxx&actie=uitnodig       -> (met sleutel) -> { uitnodiging, dagen, keer }
  *   POST ?code=xxx&actie=alleen-dit     -> (met sleutel) alle andere apparaten loskoppelen
  *
- * wie = owen | jake | papa | wensen. De functie staat op jakevanpelt.com en wordt ook
+ * wie = owen | owen-2 | owen-3 | jake | ... | papa-3 | wensen. Een apparaat mag alleen bij de
+ * planeten van zijn eigen speler (zie magBij in planeet-toegang.mjs). De functie staat op jakevanpelt.com en wordt ook
  * aangeroepen vanaf owenvanpelt.com (en vanaf papa's laptop), vandaar CORS open.
  */
 import { getStore } from '@netlify/blobs'
-import { heeftToegang, geefSleutel, maakUitnodiging, alleenDit, BOTSING, SLEUTEL_HEADER } from '../lib/planeet-toegang.mjs'
+import { heeftToegang, magBij, geefSleutel, maakUitnodiging, alleenDit, BOTSING, SLEUTEL_HEADER } from '../lib/planeet-toegang.mjs'
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -29,7 +30,8 @@ const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json', ...CORS } })
 
 const schoon = (c) => (c || '').toString().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 48)
-const WIE = ['owen', 'jake', 'papa', 'wensen']
+// Elke speler heeft drie planeten: owen (de eerste, zoals vroeger), owen-2 en owen-3.
+const isWie = (w) => w === 'wensen' || /^(owen|jake|papa)(-[23])?$/.test(w || '')
 const MAX = 4_000_000 // een planeet met getekende en echte wezens is een paar honderd kB
 
 export default async (req) => {
@@ -53,8 +55,12 @@ export default async (req) => {
       return sleutel ? json({ sleutel }) : json({ fout: 'geen toegang' }, 401)
     }
     if (actie === 'uitnodig') {
-      if (!(await heeftToegang(store, code, req))) return json({ fout: 'geen toegang' }, 401)
-      const u = await maakUitnodiging(store, code)
+      const toegang = await heeftToegang(store, code, req)
+      if (!toegang) return json({ fout: 'geen toegang' }, 401)
+      // Een apparaat van een kind kan alleen uitnodigingen voor zichzelf maken.
+      const voor = ['owen', 'jake', 'papa'].includes(url.searchParams.get('speler')) ? url.searchParams.get('speler') : null
+      if (toegang.speler && voor !== toegang.speler) return json({ fout: 'geen toegang' }, 403)
+      const u = await maakUitnodiging(store, code, voor)
       return u && u !== BOTSING ? json(u) : json({ fout: 'probeer opnieuw' }, 503)
     }
     if (actie === 'alleen-dit') {
@@ -65,8 +71,11 @@ export default async (req) => {
     return json({ fout: 'onbekende actie' }, 400)
   }
 
-  if (!WIE.includes(wie)) return json({ fout: 'onbekende planeet' }, 400)
-  if (!(await heeftToegang(store, code, req))) return json({ fout: 'geen toegang' }, 401)
+  if (!isWie(wie)) return json({ fout: 'onbekende planeet' }, 400)
+  const toegang = await heeftToegang(store, code, req)
+  if (!toegang) return json({ fout: 'geen toegang' }, 401)
+  // Niet bij de planeten van een ander kind.
+  if (!magBij(toegang, wie, req)) return json({ fout: 'niet jouw planeet' }, 403)
   const sleutel = `${code}/${wie}`
 
   const bak = `${code}/_prullenbak/${wie}/`

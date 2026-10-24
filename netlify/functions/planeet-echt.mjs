@@ -19,7 +19,7 @@
  * Sleutel: omgevingsvariabele OPENAI_API_KEY in Netlify (dezelfde als KIZZO).
  */
 import { getStore } from '@netlify/blobs'
-import { heeftToegang, SLEUTEL_HEADER } from '../lib/planeet-toegang.mjs'
+import { heeftToegang, magBij, SLEUTEL_HEADER } from '../lib/planeet-toegang.mjs'
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -41,7 +41,9 @@ export default async (req) => {
   if (code.length < 8 || !PLANETEN.includes(wie)) return json({ fout: 'ongeldige code' }, 400)
 
   const store = getStore('planeten')
-  if (!(await heeftToegang(store, code, req))) return json({ kan: false, fout: 'geen toegang' }, 401)
+  const toegang = await heeftToegang(store, code, req)
+  if (!toegang) return json({ kan: false, fout: 'geen toegang' }, 401)
+  if (!magBij(toegang, wie, req)) return json({ kan: false, fout: 'niet jouw planeet' }, 403)
   // Altijd de laatste stand: net na het aanzetten van de wolk moet de toverknop meteen werken.
   if (!(await store.get(`${code}/_familie`, { consistency: 'strong' }))) return json({ kan: false, fout: 'onbekende familie' }, 403)
   const dag = new Date().toISOString().slice(0, 10)
