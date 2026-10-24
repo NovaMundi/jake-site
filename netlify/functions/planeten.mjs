@@ -14,12 +14,17 @@
  *   POST ?code=xxx&actie=uitnodig       -> (met sleutel) -> { uitnodiging, dagen, keer }
  *   POST ?code=xxx&actie=alleen-dit     -> (met sleutel) alle andere apparaten loskoppelen
  *
+ * DNA sturen (een wezen naar een ander kind in de familie; die moet het altijd eerst goedkeuren):
+ *   POST ?code=xxx&actie=dna&van=owen&naar=jake   -> body = { wezen } -> { ok }
+ *   GET  ?code=xxx&actie=post&speler=jake         -> [{ id, van, wezen }]
+ *   POST ?code=xxx&actie=post-weg&speler=jake&id= -> (na ja of nee) weg uit de brievenbus
+ *
  * wie = owen | owen-2 | owen-3 | jake | ... | papa-3 | wensen. Een apparaat mag alleen bij de
  * planeten van zijn eigen speler (zie magBij in planeet-toegang.mjs). De functie staat op jakevanpelt.com en wordt ook
  * aangeroepen vanaf owenvanpelt.com (en vanaf papa's laptop), vandaar CORS open.
  */
 import { getStore } from '@netlify/blobs'
-import { heeftToegang, magBij, geefSleutel, maakUitnodiging, alleenDit, BOTSING, SLEUTEL_HEADER } from '../lib/planeet-toegang.mjs'
+import { heeftToegang, magBij, siteSpeler, geefSleutel, maakUitnodiging, alleenDit, BOTSING, SLEUTEL_HEADER } from '../lib/planeet-toegang.mjs'
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -42,8 +47,51 @@ export default async (req) => {
   if (code.length < 8) return json({ fout: 'ongeldige code' }, 400)
   const store = getStore('planeten')
 
-  // Koppelen: een sleutel voor dit apparaat, of een uitnodiging voor een ander apparaat.
   const actie = url.searchParams.get('actie')
+  // ---- DNA-brievenbus per speler ----
+  const SPELERS = ['owen', 'jake', 'papa']
+  if (actie === 'dna' || actie === 'post' || actie === 'post-weg') {
+    const toegang = await heeftToegang(store, code, req)
+    if (!toegang) return json({ fout: 'geen toegang' }, 401)
+    if (actie === 'dna' && req.method === 'POST') {
+      const van = url.searchParams.get('van'), naar = url.searchParams.get('naar')
+      if (!SPELERS.includes(van) || !SPELERS.includes(naar) || van === naar) return json({ fout: 'onbekend' }, 400)
+      // Alleen namens jezelf versturen.
+      if (!magBij(toegang, van, req)) return json({ fout: 'niet jouw wezen' }, 403)
+      const rauw = await req.text()
+      if (rauw.length > 2_000_000) return json({ fout: 'te groot' }, 413)
+      let wezen
+      try {
+        wezen = JSON.parse(rauw).wezen
+      } catch {}
+      if (!wezen || typeof wezen !== 'object' || typeof wezen.plaatje !== 'string') return json({ fout: 'geen wezen' }, 400)
+      const bus = `${code}/_post/${naar}/`
+      const { blobs } = await store.list({ prefix: bus })
+      if (blobs.length >= 10) return json({ fout: 'brievenbus vol' }, 429)
+      await store.set(bus + Date.now(), JSON.stringify({ van, wezen, wanneer: new Date().toISOString() }))
+      return json({ ok: true })
+    }
+    const speler = url.searchParams.get('speler')
+    if (!SPELERS.includes(speler) || !magBij(toegang, speler, req)) return json({ fout: 'niet jouw brievenbus' }, 403)
+    const bus = `${code}/_post/${speler}/`
+    if (actie === 'post' && req.method === 'GET') {
+      const { blobs } = await store.list({ prefix: bus })
+      const uit = []
+      for (const b of blobs.slice(0, 10)) {
+        const d = await store.get(b.key, { type: 'json', consistency: 'strong' })
+        if (d) uit.push({ id: b.key.slice(bus.length), ...d })
+      }
+      return json(uit)
+    }
+    if (actie === 'post-weg' && req.method === 'POST') {
+      const id = (url.searchParams.get('id') || '').replace(/[^0-9]/g, '')
+      if (id) await store.delete(bus + id)
+      return json({ ok: true })
+    }
+    return json({ fout: 'methode niet toegestaan' }, 405)
+  }
+
+  // Koppelen: een sleutel voor dit apparaat, of een uitnodiging voor een ander apparaat.
   if (actie && req.method === 'POST') {
     if (actie === 'sleutel') {
       let uitnodiging = null
