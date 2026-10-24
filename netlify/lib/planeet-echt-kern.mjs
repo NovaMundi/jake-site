@@ -49,7 +49,24 @@ function naarBuffer(dataUrl) {
 }
 
 // Roept OpenAI aan. Geeft een data-URL (png met doorzichtige achtergrond) terug.
-export async function maakEcht({ image, huid, beweging, maat }, { sleutel, model = 'gpt-image-1', kwaliteit = 'medium' } = {}) {
+// gpt-image-1 is op 23 okt 2026 door OpenAI uitgezet; daarom gpt-image-2, met gpt-image-1.5 als reserve.
+export const MODELLEN = ['gpt-image-2', 'gpt-image-1.5'];
+export async function maakEcht(invoer, opties = {}) {
+  const modellen = opties.model ? [opties.model] : MODELLEN;
+  let laatste;
+  for (const model of modellen) {
+    try {
+      return await maakEchtMet(invoer, { ...opties, model });
+    } catch (e) {
+      laatste = e;
+      // Alleen doorgaan naar het volgende model als dit model het niet (meer) doet.
+      if (!/model|does not exist|not found|deprecated|shut ?down/i.test(e.message)) throw e;
+    }
+  }
+  throw laatste;
+}
+
+async function maakEchtMet({ image, huid, beweging, maat }, { sleutel, model, kwaliteit = 'medium' } = {}) {
   if (!sleutel) {
     const e = new Error('Geen OpenAI-sleutel ingesteld');
     e.status = 501;

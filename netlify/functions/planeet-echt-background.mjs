@@ -24,9 +24,10 @@ export default async (req) => {
   if (!invoer) return
   await store.delete(`${code}/_taak/${taak}/in`)
   try {
-    const beeld = await maakEcht(invoer, { sleutel: process.env.OPENAI_API_KEY, kwaliteit: process.env.PLANETEN_IMAGE_QUALITY || 'medium' })
+    const beeld = await maakEcht(invoer, { sleutel: process.env.OPENAI_API_KEY, kwaliteit: process.env.PLANETEN_IMAGE_QUALITY || 'medium', model: process.env.PLANETEN_IMAGE_MODEL || undefined })
     await store.set(`${code}/_taak/${taak}/uit`, JSON.stringify({ beeld }))
   } catch (e) {
+    console.error('Toveren mislukt:', e.status, e.message)
     const dag = new Date().toISOString().slice(0, 10)
     for (const sleutel of [`${code}/_echt/${dag}/${wie}`, `_echt-totaal/${dag}`]) {
       const n = Number((await store.get(sleutel, { consistency: 'strong' })) || 0)

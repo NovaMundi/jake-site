@@ -48,11 +48,13 @@ export default async (req) => {
   const teller = `${code}/_echt/${dag}/${wie}`
   const totaal = `_echt-totaal/${dag}`
   const gebruikt = Number((await store.get(teller, { consistency: 'strong' })) || 0)
-  const over = Math.max(0, PER_DAG - gebruikt)
+  // Een familie kan een eigen aantal per dag hebben (bijv. testgezinnen), anders de standaard.
+  const perDag = Math.min(50, Number(await store.get(`${code}/_echtPerDag`, { consistency: 'strong' })) || PER_DAG)
+  const over = Math.max(0, perDag - gebruikt)
 
   if (req.method === 'GET') {
     const taak = schoon(url.searchParams.get('taak'))
-    if (!taak) return json({ kan: !!process.env.OPENAI_API_KEY, over, perDag: PER_DAG })
+    if (!taak) return json({ kan: !!process.env.OPENAI_API_KEY, over, perDag })
     const uit = await store.get(`${code}/_taak/${taak}/uit`, { type: 'json', consistency: 'strong' })
     if (!uit) return json({ klaar: false })
     // Opgehaald is opgehaald: niet bewaren wat niet bewaard hoeft te worden.
@@ -61,9 +63,9 @@ export default async (req) => {
   }
   if (req.method !== 'POST') return json({ fout: 'methode niet toegestaan' }, 405)
   if (!process.env.OPENAI_API_KEY) return json({ fout: 'geen sleutel' }, 501)
-  if (over <= 0) return json({ fout: 'limiet', over: 0, perDag: PER_DAG }, 429)
+  if (over <= 0) return json({ fout: 'limiet', over: 0, perDag }, 429)
   const vandaagTotaal = Number((await store.get(totaal, { consistency: 'strong' })) || 0)
-  if (vandaagTotaal >= TOTAAL_PER_DAG) return json({ fout: 'limiet', over: 0, perDag: PER_DAG }, 429)
+  if (vandaagTotaal >= TOTAAL_PER_DAG) return json({ fout: 'limiet', over: 0, perDag }, 429)
 
   const rauw = await req.text()
   if (rauw.length > 3_000_000) return json({ fout: 'te groot' }, 413)
