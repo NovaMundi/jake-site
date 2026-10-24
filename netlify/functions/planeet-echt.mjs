@@ -19,12 +19,12 @@
  * Sleutel: omgevingsvariabele OPENAI_API_KEY in Netlify (dezelfde als KIZZO).
  */
 import { getStore } from '@netlify/blobs'
-import { heeftToegang, magBij, SLEUTEL_HEADER } from '../lib/planeet-toegang.mjs'
+import { heeftToegang, magBij, SLEUTEL_HEADER, KIND_HEADER, OUDER_HEADER } from '../lib/planeet-toegang.mjs'
 
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, POST, OPTIONS',
-  'access-control-allow-headers': 'content-type, ' + SLEUTEL_HEADER,
+  'access-control-allow-headers': ['content-type', SLEUTEL_HEADER, KIND_HEADER, OUDER_HEADER].join(', '),
 }
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json', ...CORS } })
@@ -38,7 +38,7 @@ export default async (req) => {
   const url = new URL(req.url)
   const code = schoon(url.searchParams.get('code'))
   const wie = url.searchParams.get('wie')
-  if (code.length < 8 || !PLANETEN.includes(wie)) return json({ fout: 'ongeldige code' }, 400)
+  if (code.length < 8 || !/^[a-z][a-z0-9]{1,11}$/.test(wie || '')) return json({ fout: 'ongeldige code' }, 400)
 
   const store = getStore('planeten')
   const toegang = await heeftToegang(store, code, req)
@@ -51,7 +51,8 @@ export default async (req) => {
   const totaal = `_echt-totaal/${dag}`
   const gebruikt = Number((await store.get(teller, { consistency: 'strong' })) || 0)
   // Een familie kan een eigen aantal per dag hebben (bijv. testgezinnen), anders de standaard.
-  const perDag = Math.min(50, Number(await store.get(`${code}/_echtPerDag`, { consistency: 'strong' })) || PER_DAG)
+  // Per kind uit het ouderportaal; anders per familie (oude koppeling) of de standaard.
+  const perDag = toegang.kind ? toegang.kind.toveren : Math.min(50, Number(await store.get(`${code}/_echtPerDag`, { consistency: 'strong' })) || PER_DAG)
   const over = Math.max(0, perDag - gebruikt)
 
   if (req.method === 'GET') {

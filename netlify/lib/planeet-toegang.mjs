@@ -23,6 +23,9 @@ const OVERGANG_PER_DAG = 12 // sleutels zonder uitnodiging (overgang), per famil
 export const BOTSING = Symbol('botsing')
 
 export const SLEUTEL_HEADER = 'x-planeet-sleutel'
+export const KIND_HEADER = 'x-kind'
+export const OUDER_HEADER = 'x-ouder-sessie'
+import { kindVan, ouderVan } from './planeet-gezin.mjs'
 
 async function hash(t) {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(t)))
@@ -61,15 +64,39 @@ export function siteSpeler(req) {
   return null
 }
 // Mag dit apparaat (toegang uit heeftToegang) bij planeet 'wie'? De wensen zijn van iedereen.
+// Een kind (QR-link) volgt de instellingen uit het ouderportaal: eigen planeten tot zijn aantal,
+// de familieplaneet als die aan staat, en die van broers en zussen alleen kijken of ook bouwen.
 export function magBij(toegang, wie, req) {
   if (!toegang) return false
   if (wie === 'wensen') return true
+  if (toegang.ouder) return true
+  if (toegang.kind) {
+    const k = toegang.kind
+    const nr = Number(String(wie).split('-')[1] || 1)
+    if (wie === 'samen') return !!toegang.gezin.familieplaneet
+    if (spelerVan(wie) === k.id) return nr <= k.planeten
+    const ander = toegang.gezin.kinderen.find((x) => x.id === spelerVan(wie))
+    if (!ander || nr > ander.planeten) return false
+    if (k.elkaar === 'bouwen') return true
+    return k.elkaar === 'kijken' && req.method === 'GET'
+  }
   const eigen = [toegang.speler, siteSpeler(req)].filter(Boolean)
   return eigen.every((s) => s === spelerVan(wie))
 }
 
 // Heeft dit verzoek toegang tot de planeten van deze familie? Geeft false of { speler } terug.
 export async function heeftToegang(store, code, req) {
+  // Kind met de geheime link uit de QR-code (ouderportaal).
+  const slug = req.headers.get(KIND_HEADER)
+  if (slug) {
+    const k = await kindVan(store, slug)
+    return k && k.familie === code ? { speler: k.kind.id, kind: k.kind, gezin: k.gezin } : false
+  }
+  // Ouder, ingelogd in het portaal.
+  if (req.headers.get(OUDER_HEADER)) {
+    const o = await ouderVan(store, req)
+    return o && o.familie === code ? { speler: null, ouder: true } : false
+  }
   const sleutel = req.headers.get(SLEUTEL_HEADER) || ''
   const reg = (await leesReg(store, code))?.data ?? null
   if (sleutel && reg) {

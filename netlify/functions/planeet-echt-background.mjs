@@ -18,7 +18,7 @@ export default async (req) => {
   const code = schoon(url.searchParams.get('code'))
   const wie = url.searchParams.get('wie')
   const taak = schoon(url.searchParams.get('taak'))
-  if (code.length < 8 || !['owen', 'jake', 'papa'].includes(wie) || !taak) return
+  if (code.length < 8 || !/^[a-z][a-z0-9]{1,11}$/.test(wie || '') || !taak) return
   const store = getStore('planeten')
   const invoer = await store.get(`${code}/_taak/${taak}/in`, { type: 'json', consistency: 'strong' })
   if (!invoer) return

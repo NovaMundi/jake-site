@@ -24,19 +24,20 @@
  * aangeroepen vanaf owenvanpelt.com (en vanaf papa's laptop), vandaar CORS open.
  */
 import { getStore } from '@netlify/blobs'
-import { heeftToegang, magBij, siteSpeler, geefSleutel, maakUitnodiging, alleenDit, BOTSING, SLEUTEL_HEADER } from '../lib/planeet-toegang.mjs'
+import { heeftToegang, magBij, siteSpeler, geefSleutel, maakUitnodiging, alleenDit, BOTSING, SLEUTEL_HEADER, KIND_HEADER, OUDER_HEADER } from '../lib/planeet-toegang.mjs'
 
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, POST, OPTIONS',
-  'access-control-allow-headers': 'content-type, ' + SLEUTEL_HEADER,
+  'access-control-allow-headers': ['content-type', SLEUTEL_HEADER, KIND_HEADER, OUDER_HEADER].join(', '),
 }
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json', ...CORS } })
 
 const schoon = (c) => (c || '').toString().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 48)
 // Elke speler heeft drie planeten: owen (de eerste, zoals vroeger), owen-2 en owen-3.
-const isWie = (w) => w === 'wensen' || /^(owen|jake|papa)(-[23])?$/.test(w || '')
+// (Kinderen uit het ouderportaal hebben een eigen id, bijv. k3f9a2c, met tot 5 planeten; 'samen' is de familieplaneet.)
+const isWie = (w) => w === 'wensen' || w === 'samen' || /^[a-z][a-z0-9]{1,11}(-[2-5])?$/.test(w || '')
 const MAX = 4_000_000 // een planeet met getekende en echte wezens is een paar honderd kB
 
 // De brievenbus is één bestand per speler (een lijst), zodat een pakje meteen te zien is (een
@@ -63,10 +64,11 @@ export default async (req) => {
 
   const actie = url.searchParams.get('actie')
   // ---- DNA-brievenbus per speler ----
-  const SPELERS = ['owen', 'jake', 'papa']
   if (actie === 'dna' || actie === 'post' || actie === 'post-weg') {
     const toegang = await heeftToegang(store, code, req)
     if (!toegang) return json({ fout: 'geen toegang' }, 401)
+    const SPELERS = toegang.gezin ? toegang.gezin.kinderen.map((k) => k.id) : ['owen', 'jake', 'papa']
+    if (actie === 'dna' && toegang.kind && !toegang.kind.dna) return json({ fout: 'DNA sturen staat uit' }, 403)
     if (actie === 'dna' && req.method === 'POST') {
       const van = url.searchParams.get('van'), naar = url.searchParams.get('naar')
       if (!SPELERS.includes(van) || !SPELERS.includes(naar) || van === naar) return json({ fout: 'onbekend' }, 400)
@@ -85,7 +87,9 @@ export default async (req) => {
       return ok ? json({ ok: true }) : json({ fout: 'probeer opnieuw' }, 503)
     }
     const speler = url.searchParams.get('speler')
-    if (!SPELERS.includes(speler) || !magBij(toegang, speler, req)) return json({ fout: 'niet jouw brievenbus' }, 403)
+    // Alleen je eigen brievenbus (ook als je de planeten van een broer of zus mag zien).
+    const eigen = toegang.kind ? speler === toegang.kind.id : magBij(toegang, speler, req)
+    if (!SPELERS.includes(speler) || !eigen) return json({ fout: 'niet jouw brievenbus' }, 403)
     const bus = `${code}/_postbus/${speler}`
     if (actie === 'post' && req.method === 'GET') return json((await store.get(bus, { type: 'json', consistency: 'strong' })) || [])
     if (actie === 'post-weg' && req.method === 'POST') {
