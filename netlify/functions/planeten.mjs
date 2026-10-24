@@ -16,7 +16,7 @@
  *
  * DNA sturen (een wezen naar een ander kind in de familie; die moet het altijd eerst goedkeuren):
  *   POST ?code=xxx&actie=dna&van=owen&naar=jake   -> body = { wezen } -> { ok }
- *   GET  ?code=xxx&actie=post&speler=jake         -> [{ id, van, wezen }]
+ *   GET  ?code=xxx&actie=post&speler=jake         -> [{ id, van, wezen }]   (bewaard in <code>/_postbus/<speler>)
  *   POST ?code=xxx&actie=post-weg&speler=jake&id= -> (na ja of nee) weg uit de brievenbus
  *
  * wie = owen | owen-2 | owen-3 | jake | ... | papa-3 | wensen. Een apparaat mag alleen bij de
@@ -38,6 +38,20 @@ const schoon = (c) => (c || '').toString().toLowerCase().replace(/[^a-z0-9-]/g, 
 // Elke speler heeft drie planeten: owen (de eerste, zoals vroeger), owen-2 en owen-3.
 const isWie = (w) => w === 'wensen' || /^(owen|jake|papa)(-[23])?$/.test(w || '')
 const MAX = 4_000_000 // een planeet met getekende en echte wezens is een paar honderd kB
+
+// De brievenbus is één bestand per speler (een lijst), zodat een pakje meteen te zien is (een
+// lijst van losse bestanden loopt in Netlify Blobs tot een minuut achter). Aanpassen gaat atomisch.
+async function pasBusAan(store, sleutel, fn) {
+  for (let poging = 0; poging < 4; poging++) {
+    const huidig = await store.getWithMetadata(sleutel, { type: 'json', consistency: 'strong' })
+    const nieuw = fn(huidig?.data || [])
+    if (!nieuw) return 'vol'
+    const voorwaarde = huidig?.etag ? { onlyIfMatch: huidig.etag } : huidig ? {} : { onlyIfNew: true }
+    const gelukt = await store.set(sleutel, JSON.stringify(nieuw), voorwaarde)
+    if (!gelukt || gelukt.modified !== false) return true
+  }
+  return false
+}
 
 export default async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
@@ -65,27 +79,18 @@ export default async (req) => {
         wezen = JSON.parse(rauw).wezen
       } catch {}
       if (!wezen || typeof wezen !== 'object' || typeof wezen.plaatje !== 'string') return json({ fout: 'geen wezen' }, 400)
-      const bus = `${code}/_post/${naar}/`
-      const { blobs } = await store.list({ prefix: bus })
-      if (blobs.length >= 10) return json({ fout: 'brievenbus vol' }, 429)
-      await store.set(bus + Date.now(), JSON.stringify({ van, wezen, wanneer: new Date().toISOString() }))
-      return json({ ok: true })
+      const pakje = { id: String(Date.now()), van, wezen, wanneer: new Date().toISOString() }
+      const ok = await pasBusAan(store, `${code}/_postbus/${naar}`, (lijst) => (lijst.length >= 10 ? null : [...lijst, pakje]))
+      if (ok === 'vol') return json({ fout: 'brievenbus vol' }, 429)
+      return ok ? json({ ok: true }) : json({ fout: 'probeer opnieuw' }, 503)
     }
     const speler = url.searchParams.get('speler')
     if (!SPELERS.includes(speler) || !magBij(toegang, speler, req)) return json({ fout: 'niet jouw brievenbus' }, 403)
-    const bus = `${code}/_post/${speler}/`
-    if (actie === 'post' && req.method === 'GET') {
-      const { blobs } = await store.list({ prefix: bus })
-      const uit = []
-      for (const b of blobs.slice(0, 10)) {
-        const d = await store.get(b.key, { type: 'json', consistency: 'strong' })
-        if (d) uit.push({ id: b.key.slice(bus.length), ...d })
-      }
-      return json(uit)
-    }
+    const bus = `${code}/_postbus/${speler}`
+    if (actie === 'post' && req.method === 'GET') return json((await store.get(bus, { type: 'json', consistency: 'strong' })) || [])
     if (actie === 'post-weg' && req.method === 'POST') {
       const id = (url.searchParams.get('id') || '').replace(/[^0-9]/g, '')
-      if (id) await store.delete(bus + id)
+      await pasBusAan(store, bus, (lijst) => lijst.filter((p) => p.id !== id))
       return json({ ok: true })
     }
     return json({ fout: 'methode niet toegestaan' }, 405)
