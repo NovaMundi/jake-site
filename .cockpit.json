@@ -2,5 +2,5 @@
   "health": "green",
   "stage": "live",
   "next": "Tim: ouderaccount maken met de startcode en per tablet de nieuwe QR-code scannen",
-  "note": "Fossil Diggers (graafspel van Owen) toegevoegd op /fossil-diggers met knop, plus cloud-opslag (functie fossil-diggers) zodat het museum meegaat tussen huizen"
+  "note": "Fossil Diggers: inloggen met naam en wachtwoordje, museum gaat mee tussen huizen via de wolk"
 }
